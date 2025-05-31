@@ -1,0 +1,194 @@
+from dotenv import load_dotenv
+load_dotenv()
+
+from llama_index.llms.openai import OpenAI
+from llama_index.core.agent.workflow import AgentWorkflow
+from llama_index.core.workflow import Context
+from llama_index.core.agent.workflow import (
+    AgentOutput,
+    ToolCall,
+    ToolCallResult,
+)
+from llama_index.tools.tavily_research import TavilyToolSpec
+from llama_index.core.agent.workflow import FunctionAgent
+import os
+from llama_index.tools.google import GoogleSearchToolSpec
+import asyncio
+
+# 全局状态存储
+last_state = {
+    "research_notes": {},
+    "report_content": "尚未撰写。",
+    "review": "需要审查。",
+}
+
+# 加载 .env 文件中的环境变量
+load_dotenv()
+
+# 从环境变量中获取端点和密钥
+api_endpoint = os.getenv("API_ENDPOINT")
+api_key = os.getenv("API_KEY")
+google_api_key = os.getenv("GOOGLE_API_KEY")
+google_cse_id = os.getenv("GOOGLE_CUSTOM_SEARCH_ENGINE_ID")
+
+# 验证环境变量是否正确加载
+if not all([api_endpoint, api_key, google_api_key, google_cse_id]):
+    raise ValueError("缺少 .env 文件中的必要环境变量")
+
+# 简单验证 Google API 密钥和 CSE ID 格式
+if len(google_api_key) < 20 or len(google_cse_id) < 10:
+    raise ValueError("GOOGLE_API_KEY 或 GOOGLE_CUSTOM_SEARCH_ENGINE_ID 格式无效")
+
+# 初始化 OpenAI 实例，指定自定义端点和密钥
+llm = OpenAI(
+    model="gpt-4o-mini",  # 使用指定模型
+    api_base=api_endpoint,  # 使用自定义端点
+    api_key=api_key  # 使用自定义密钥
+)
+
+# 初始化 Google 搜索工具，指定 key、engine 和 num
+google_tool = GoogleSearchToolSpec(google_api_key, google_cse_id, num=3)
+
+search_web = google_tool.to_tool_list()[0]
+
+async def record_notes(ctx: Context, notes: str, notes_title: str) -> str:
+    """用于记录给定主题的笔记。"""
+    global last_state
+    current_state = await ctx.get("state")
+    if "research_notes" not in current_state:
+        current_state["research_notes"] = {}
+    current_state["research_notes"][notes_title] = notes
+    await ctx.set("state", current_state)
+    last_state.update(current_state)  # 更新全局状态
+    print(f"状态更新 - 笔记: {last_state['research_notes']}")  # 调试状态
+    return "笔记已记录。"
+
+async def write_report(ctx: Context, report_content: str) -> str:
+    """用于撰写给定主题的报告。"""
+    global last_state
+    current_state = await ctx.get("state")
+    current_state["report_content"] = report_content
+    await ctx.set("state", current_state)
+    last_state.update(current_state)  # 更新全局状态
+    print(f"状态更新 - 报告: {last_state['report_content']}")  # 调试状态
+    return "报告已撰写。"
+
+async def review_report(ctx: Context, review: str) -> str:
+    """用于审查报告并提供反馈。"""
+    global last_state
+    current_state = await ctx.get("state")
+    current_state["review"] = review
+    await ctx.set("state", current_state)
+    last_state.update(current_state)  # 更新全局状态
+    print(f"状态更新 - 审查: {last_state['review']}")  # 调试状态
+    return "报告已审查。"
+
+research_agent = FunctionAgent(
+    name="ResearchAgent",
+    description="擅长搜索给定主题的网络信息并记录笔记。",
+    system_prompt=(
+        "你是一个研究代理，负责搜索给定主题的网络信息并记录笔记。"
+        "在记录足够笔记后，输出 '[HANDOFF:WriteAgent]' 以移交控制权给撰写代理。"
+        "确保笔记存储在 ctx.state['research_notes'] 中，并在移交前确认状态更新。"
+        "在输出中声明：'正在移交至 WriteAgent'。"
+    ),
+    llm=llm,
+    tools=[search_web, record_notes],
+    can_handoff_to=["WriteAgent"],
+)
+
+write_agent = FunctionAgent(
+    name="WriteAgent",
+    description="擅长撰写给定主题的报告。",
+    system_prompt=(
+        "你是一个撰写代理，负责根据 ctx.state['research_notes'] 撰写给定主题的报告。"
+        "报告必须采用 Markdown 格式，内容需基于研究笔记。"
+        "撰写完成后，输出 '[HANDOFF:ReviewAgent]' 以移交审查代理获取反馈。"
+        "确保报告存储在 ctx.state['report_content'] 中。"
+        "在输出中声明：'正在移交至 ReviewAgent'。"
+    ),
+    llm=llm,
+    tools=[write_report],
+    can_handoff_to=["ReviewAgent", "ResearchAgent"],
+)
+
+review_agent = FunctionAgent(
+    name="ReviewAgent",
+    description="擅长审查报告并提供反馈。",
+    system_prompt=(
+        "你是一个审查代理，负责审查 ctx.state['report_content'] 并提供反馈。"
+        "反馈应明确批准报告或要求撰写代理修改（说明修改内容）。"
+        "若需要修改，输出 '[HANDOFF:WriteAgent]'；若批准，输出 '[DONE]'。"
+        "确保反馈存储在 ctx.state['review'] 中。"
+        "在输出中声明：'报告已批准' 或 '要求修改，正在移交至 WriteAgent'。"
+    ),
+    llm=llm,
+    tools=[review_report],
+    can_handoff_to=["WriteAgent"],
+)
+
+agent_workflow = AgentWorkflow(
+    agents=[research_agent, write_agent, review_agent],
+    root_agent=research_agent.name,
+    initial_state={
+        "research_notes": {},
+        "report_content": "尚未撰写。",
+        "review": "需要审查。",
+    },
+)
+
+async def main():
+    try:
+        async with asyncio.timeout(180):  # 设置180秒超时
+            handler = agent_workflow.run(user_msg="""
+                为我撰写一份关于网络历史的报告。简要描述万维网的历史，
+                包括互联网的发展和万维网的发展，涵盖21世纪的进展。
+            """)
+            current_agent = None
+            async for event in handler.stream_events():
+                if (
+                    hasattr(event, "current_agent_name")
+                    and event.current_agent_name != current_agent
+                ):
+                    current_agent = event.current_agent_name
+                    print(f"\n{'='*50}")
+                    print(f"🤖 代理: {current_agent}")
+                    print(f"{'='*50}\n")
+                elif isinstance(event, AgentOutput):
+                    if event.response.content:
+                        print("📤 输出:", event.response.content)
+                    if event.tool_calls:
+                        print(
+                            "🛠️ 计划使用的工具:",
+                            [call.tool_name for call in event.tool_calls],
+                        )
+                    # 检测移交指令
+                    if event.response.content and "[HANDOFF:" in event.response.content:
+                        handoff_target = event.response.content.split("[HANDOFF:")[1].split("]")[0]
+                        print(f"🚀 移交至代理: {handoff_target}")
+                elif isinstance(event, ToolCallResult):
+                    print(f"🔧 工具结果 ({event.tool_name}):")
+                    print(f"  参数: {event.tool_kwargs}")
+                    print(f"  输出: {event.tool_output}")
+                elif isinstance(event, ToolCall):
+                    print(f"🔨 调用工具: {event.tool_name}")
+                    print(f"  参数: {event.tool_kwargs}")
+            # 等待工作流完成
+            await handler  # 确保工作流完成
+            # 输出最终状态
+            print(f"\n{'='*50}")
+            print("最终结果:")
+            print(f"笔记: {last_state['research_notes']}")
+            print(f"报告内容: {last_state['report_content']}")
+            print(f"审查反馈: {last_state['review']}")
+            print(f"{'='*50}")
+    except asyncio.TimeoutError:
+        print("工作流超时：请检查网络连接或增加超时时间")
+    except Exception as e:
+        print(f"工作流错误: {e}")
+
+if __name__ == "__main__":
+    # 强烈建议升级 LlamaIndex 至最新版本以确保 AgentWorkflow 功能正常
+    # 运行前执行：pip install --upgrade llama-index-core llama-index
+    import asyncio
+    asyncio.run(main())

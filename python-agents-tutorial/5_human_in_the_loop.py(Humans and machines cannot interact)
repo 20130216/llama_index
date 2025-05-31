@@ -1,0 +1,57 @@
+from dotenv import load_dotenv
+import os
+from llama_index.llms.openai import OpenAI
+from llama_index.core.agent import FunctionCallingAgent
+from llama_index.core.tools import FunctionTool
+import asyncio
+
+# 加载 .env 文件中的环境变量
+load_dotenv()
+
+# 从环境变量中获取端点和密钥
+api_endpoint = os.getenv("API_ENDPOINT")
+api_key = os.getenv("API_KEY")
+
+# 初始化 OpenAI 实例
+llm = OpenAI(
+    model="gpt-4o-mini",
+    api_base=api_endpoint,
+    api_key=api_key
+)
+
+# 定义危险任务
+async def dangerous_task() -> str:
+    """执行需要人工确认的危险任务。"""
+    print("调试：进入 dangerous_task 函数")
+    question = "您确定要继续执行危险任务吗？请输入 'yes' 或 'no'： "
+    response = input(question)
+    print(f"调试：收到用户响应 {response}")
+    if response.strip().lower() == "yes":
+        return "危险任务已成功完成。"
+    else:
+        return "危险任务已中止。"
+
+# 将 dangerous_task 包装为 FunctionTool
+dangerous_task_tool = FunctionTool.from_defaults(
+    fn=dangerous_task,
+    name="dangerous_task",
+    description="执行一个需要用户确认的危险任务"
+)
+
+# 创建 FunctionCallingAgent
+agent = FunctionCallingAgent.from_tools(
+    [dangerous_task_tool],
+    llm=llm,
+    system_prompt="您是一个助手，专门处理危险任务。当用户输入包含‘危险任务’或‘dangerous_task’的请求时，必须直接调用 dangerous_task 函数，并等待用户确认。不要生成任何其他对话响应。",
+)
+
+# 主函数
+async def main():
+    print("调试：启动代理")
+    # 使用 agent.achat 触发工具调用
+    response = await agent.achat("调用 dangerous_task 函数")
+    print("调试：代理完成")
+    print(str(response))
+
+if __name__ == "__main__":
+    asyncio.run(main())

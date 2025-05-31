@@ -36,7 +36,7 @@ readme = "README.md"
 license = "MIT"
 dependencies = [
     "llama-cloud==0.1.21",
-    "llama-index-core>=0.12.0,<0.13",
+    "llama-index-core @ file:///Users/wingzheng/Desktop/github/ParseDoc/llama_index",
 ]
 
 [tool.codespell]

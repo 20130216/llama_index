@@ -340,6 +340,7 @@ class LlamaCloudIndex(BaseManagedIndex):
         """
         # Batch of files (if any)
         if file_ids:
+            # 轮询文档状态，直到所有文档摄取完成。
             self._wait_for_resources(
                 file_ids,
                 lambda fid: self._client.pipelines.get_pipeline_file_status(
@@ -368,7 +369,7 @@ class LlamaCloudIndex(BaseManagedIndex):
         # Finally, wait for the pipeline
         if verbose:
             print(f"Syncing pipeline {self.pipeline.id}")
-
+        # 检查索引（pipeline）状态，确保摄取完成。
         status_response: Optional[ManagedIngestionStatusResponse] = None
         while True:
             try:
@@ -646,6 +647,7 @@ class LlamaCloudIndex(BaseManagedIndex):
         client = get_client(api_key, base_url, app_url, timeout)
 
         # this kicks off document ingestion
+        # 批量插入文档到索引，文档 ID 为 1，文本为 Hello world.。
         upserted_documents = client.pipelines.upsert_batch_pipeline_documents(
             pipeline_id=index.pipeline.id,
             request=[
@@ -661,8 +663,12 @@ class LlamaCloudIndex(BaseManagedIndex):
         )
 
         doc_ids = [doc.id for doc in upserted_documents]
-        index._wait_for_documents_ingestion(
-            doc_ids, verbose=verbose, raise_on_error=raise_on_error
+        # index._wait_for_documents_ingestion(
+        #     doc_ids, verbose=verbose, raise_on_error=raise_on_error
+        # )
+        # 替换为这个新的方法：等待文档摄取完成
+        index.wait_for_completion(
+            doc_ids=doc_ids, verbose=verbose, raise_on_error=raise_on_error
         )
 
         print(

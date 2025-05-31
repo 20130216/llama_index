@@ -21,7 +21,6 @@ from llama_index.indices.managed.llama_cloud import (
     LlamaCloudCompositeRetriever,
 )
 from llama_index.embeddings.openai import OpenAIEmbedding
-from llama_index.embeddings.openai_like import OpenAILikeEmbedding  # 新增导入
 
 from dotenv import load_dotenv
 
@@ -42,18 +41,13 @@ project_name = os.environ.get("LLAMA_CLOUD_PROJECT_NAME", "framework_integration
 base_url = os.getenv("LLAMA_CLOUD_US_BASE_URL")
 api_key = os.getenv("LLAMA_CLOUD_API_KEY")
 
-organization_id = os.getenv("LLAMA_CLOUD_ORGANIZATION_ID", None)
-project_name = os.getenv("LLAMA_CLOUD_PROJECT_NAME", "framework_integration_test")
-
 openai_api_key = os.getenv("OPENAI_API_KEY")
 # openapi_endpoint = os.getenv("OPENAPI_API_ENDPOINT")  # 新增读取自定义端点
 openai_api_endpoint = os.getenv("OPENAI_API_ENDPOINT", "https://api.openai.com/v1")
 
-# 新增 BlendAPI 变量
-blendapi_api_key = os.getenv("BLENDAPI_API_KEY")
-blendapi_api_endpoint = os.getenv(
-    "BLENDAPI_API_ENDPOINT", "https://api.blendapi.com/v1"
-)
+organization_id = os.getenv("LLAMA_CLOUD_ORGANIZATION_ID", None)
+project_name = os.getenv("LLAMA_CLOUD_PROJECT_NAME", "framework_integration_test")
+
 
 # 调试输出
 # print(f"DEBUG--LLAMA_CLOUD_US_BASE_URL is: {os.getenv('LLAMA_CLOUD_US_BASE_URL')}")
@@ -67,8 +61,6 @@ print(f"DEBUG--OPENAI_API_ENDPOINT is: {os.getenv('OPENAI_API_ENDPOINT')}")
 print(
     f"DEBUG--LLAMA_CLOUD_ORGANIZATION_ID is: {os.getenv('LLAMA_CLOUD_ORGANIZATION_ID')}\n"
 )
-print(f"DEBUG--BLENDAPI_API_KEY is: {os.getenv('BLENDAPI_API_KEY')}")
-print(f"DEBUG--BLENDAPI_API_ENDPOINT is: {os.getenv('BLENDAPI_API_ENDPOINT')}\n")
 
 
 @pytest.fixture()
@@ -87,7 +79,6 @@ def index_name() -> Generator[str, None, None]:
         client = LlamaCloud(token=api_key, base_url=base_url)
         pipeline = client.pipelines.search_pipelines(project_name=name)
         if pipeline:
-            # 测试结束后，finally 块删除管道（通过 client.pipelines.delete_pipeline）。
             client.pipelines.delete(pipeline_id=pipeline[0].id)
 
 
@@ -262,20 +253,9 @@ def test_upload_file_from_url(remote_file: Tuple[str, str], index_name: str):
 )
 @pytest.mark.skipif(not openai_api_key, reason="No openai api key set")
 def test_index_from_documents(index_name: str):
-    # 上下文：from_documents 插入初始文档（doc_id="1"），调用 BlendAPI 生成嵌入向量，wait_for_completion 轮询文档和管道状态，verbose=True 打印详细进度。
     documents = [
         Document(text="Hello world.", doc_id="1", metadata={"source": "test"}),
     ]
-    # index = LlamaCloudIndex.from_documents(
-    #     documents=documents,
-    #     name=index_name,
-    #     project_name=project_name,
-    #     api_key=api_key,
-    #     base_url=base_url,
-    #     organization_id=organization_id,
-    #     verbose=True,
-    # )
-
     index = LlamaCloudIndex.from_documents(
         documents=documents,
         name=index_name,
@@ -284,35 +264,19 @@ def test_index_from_documents(index_name: str):
         base_url=base_url,
         organization_id=organization_id,
         verbose=True,
-        embedding_config={
-            "type": "OPENAI_EMBEDDING",
-            "component": OpenAILikeEmbedding(
-                model_name="text-embedding-3-small",
-                api_key=blendapi_api_key,
-                api_base=blendapi_api_endpoint,
-                timeout=120.0,  # 超时120s
-                max_retries=3,  # 重试3次
-            ),
-        },
     )
-    # ref_doc_info 获取索引中的文档元数据，验证文档数量（1）和元数据（source: test）。
     docs = index.ref_doc_info
     assert len(docs) == 1
     assert docs["1"].metadata["source"] == "test"
-    # as_retriever().retrieve 使用 LlamaCloudRetriever 检索文档，确认返回的节点引用正确文档（doc_id="1"）。
     nodes = index.as_retriever().retrieve("Hello world.")
     assert len(nodes) > 0
     assert all(n.node.ref_doc_id == "1" for n in nodes)
     assert all(n.node.metadata["source"] == "test" for n in nodes)
 
-    # 上下文（对应终端输出..Done!）：index.insert 插入新文档（doc_id="2"），调用 BlendAPI 生成嵌入，wait_for_completion 确保文档摄取和管道同步。
-    # 插入新文档（doc_id="2"），验证文档数量增至 2。
-    # index.insert 调用 base.py的create_batch_pipeline_documents 插入新文档，生成嵌入并等待摄取。
     index.insert(
         Document(text="Hello world.", doc_id="2", metadata={"source": "inserted"}),
         verbose=True,
     )
-    # ref_doc_info 确认文档数量增至 2，元数据正确（source: inserted）。
     docs = index.ref_doc_info
     assert len(docs) == 2
     assert docs["2"].metadata["source"] == "inserted"
@@ -322,8 +286,6 @@ def test_index_from_documents(index_name: str):
     assert any(n.node.ref_doc_id == "1" for n in nodes)
     assert any(n.node.ref_doc_id == "2" for n in nodes)
 
-    # 上下文（对应终端输出..Done!）：update_ref_doc 更新文档（doc_id="2"），重新生成嵌入并同步管道，日志模式与插入类似。
-    # 更新文档（doc_id="2"）的元数据，验证更新生效
     index.update_ref_doc(
         Document(text="Hello world.", doc_id="2", metadata={"source": "updated"}),
         verbose=True,
@@ -332,9 +294,6 @@ def test_index_from_documents(index_name: str):
     assert len(docs) == 2
     assert docs["2"].metadata["source"] == "updated"
 
-    # 上下文（对应终端输出..Done!）：refresh_ref_docs 批量刷新文档（doc_id="1", "3"），更新 doc_id="1" 并添加 doc_id="3"，调用 BlendAPI 生成嵌入，同步时间较长（10 次轮询）。
-    # 刷新文档（doc_id="1", "3"），添加新文档并更新现有文档
-    # refresh_ref_docs 批量更新文档（doc_id="1"）并添加新文档（doc_id="3"），生成嵌入并等待完成。
     index.refresh_ref_docs(
         [
             Document(text="Hello world.", doc_id="1", metadata={"source": "refreshed"}),
@@ -346,8 +305,6 @@ def test_index_from_documents(index_name: str):
     assert docs["3"].metadata["source"] == "refreshed"
     assert docs["1"].metadata["source"] == "refreshed"
 
-    # 上下文（对应终端输出..Done!）：delete_ref_doc 删除文档（doc_id="3"），调用 LlamaCloud API 移除文档，wait_for_completion 确保管道状态更新，无需 BlendAPI 嵌入生成。
-    # 删除文档（doc_id="3"），验证文档数量减至 2。
     index.delete_ref_doc("3", verbose=True)
     docs = index.ref_doc_info
     assert len(docs) == 2

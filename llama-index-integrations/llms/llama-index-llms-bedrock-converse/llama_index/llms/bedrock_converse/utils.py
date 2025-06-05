@@ -183,6 +183,8 @@ def _content_block_to_bedrock_format(
 ) -> Optional[Dict[str, Any]]:
     """Convert content block to AWS Bedrock Converse API required format."""
     if isinstance(block, TextBlock):
+        if not block.text:
+            return None
         return {
             "text": block.text,
         }
@@ -252,18 +254,14 @@ def messages_to_converse_messages(
     converse_messages = []
     system_prompt = ""
     for message in messages:
-        if message.role == MessageRole.SYSTEM:
-            system_prompt += message.content + "\n"
+        if message.role == MessageRole.SYSTEM and message.content:
+            system_prompt += (message.content) + "\n"
         elif message.role in [MessageRole.FUNCTION, MessageRole.TOOL]:
             # convert tool output to the AWS Bedrock Converse format
             content = {
                 "toolResult": {
                     "toolUseId": message.additional_kwargs["tool_call_id"],
-                    "content": [
-                        {
-                            "text": message.content or "",
-                        },
-                    ],
+                    "content": [{"text": message.content}] if message.content else [],
                 }
             }
             if status := message.additional_kwargs.get("status"):
@@ -325,7 +323,11 @@ def messages_to_converse_messages(
     return __merge_common_role_msgs(converse_messages), system_prompt.strip()
 
 
-def tools_to_converse_tools(tools: List["BaseTool"]) -> Dict[str, Any]:
+def tools_to_converse_tools(
+    tools: List["BaseTool"],
+    tool_choice: Optional[dict] = None,
+    tool_required: bool = False,
+) -> Dict[str, Any]:
     """
     Converts a list of tools to AWS Bedrock Converse tools.
 
@@ -349,7 +351,12 @@ def tools_to_converse_tools(tools: List["BaseTool"]) -> Dict[str, Any]:
             "inputSchema": {"json": tool.metadata.get_parameters_dict()},
         }
         converse_tools.append({"toolSpec": tool_dict})
-    return {"tools": converse_tools}
+    return {
+        "tools": converse_tools,
+        # https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_ToolChoice.html
+        # e.g. { "auto": {} }
+        "toolChoice": tool_choice or ({"any": {}} if tool_required else {"auto": {}}),
+    }
 
 
 def force_single_tool_call(response: ChatResponse) -> None:

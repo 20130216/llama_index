@@ -38,7 +38,7 @@ organization_id = os.environ.get("LLAMA_CLOUD_ORGANIZATION_ID", None)
 project_name = os.environ.get("LLAMA_CLOUD_PROJECT_NAME", "framework_integration_test") """
 
 
-# 从环境变量中获取端点和密钥
+# 从环境变量中获取cloud的端点和密钥
 base_url = os.getenv("LLAMA_CLOUD_US_BASE_URL")
 api_key = os.getenv("LLAMA_CLOUD_API_KEY")
 
@@ -49,6 +49,7 @@ openai_api_key = os.getenv("OPENAI_API_KEY")
 # openapi_endpoint = os.getenv("OPENAPI_API_ENDPOINT")  # 新增读取自定义端点
 openai_api_endpoint = os.getenv("OPENAI_API_ENDPOINT", "https://api.openai.com/v1")
 
+
 # 新增 BlendAPI 变量
 blendapi_api_key = os.getenv("BLENDAPI_API_KEY")
 blendapi_api_endpoint = os.getenv(
@@ -58,7 +59,7 @@ blendapi_api_endpoint = os.getenv(
 # 调试输出
 # print(f"DEBUG--LLAMA_CLOUD_US_BASE_URL is: {os.getenv('LLAMA_CLOUD_US_BASE_URL')}")
 print(f"\nDEBUG--LLAMA_CLOUD_US_BASE_URL is: {base_url}")
-print(f"DEBUG--LLAMA_CLOUD_API_KEY is: {os.getenv('LLAMA_CLOUD_API_KEY')}")
+print(f"DEBUG--LLAMA_CLOUD_API_KEY is: {api_key}")
 # print(f"DEBUG--BLENDAPI_API_KEY is: {os.getenv('BLENDAPI_API_KEY')}")
 # print(f"DEBUG--BLENDAPI_API_ENDPOINT is: {blendapi_endpoint}")  # 新增调试输出
 print(f"DEBUG--OPENAI_API_KEY is: {os.getenv('OPENAI_API_KEY')}")

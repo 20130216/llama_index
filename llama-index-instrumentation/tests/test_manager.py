@@ -1,4 +1,4 @@
-import llama_index.core.instrumentation as instrument
+import llama_index_instrumentation as instrument
 
 
 def test_root_manager_add_dispatcher():

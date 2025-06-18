@@ -1,0 +1,28 @@
+{
+  "_comment": "上市公司报告，适用于多页、表格和图表丰富文档。优化：提高图像权重和chart_weight，降低布局权重。",
+  "weights": {
+    "page": 0.25,
+    "image": 0.25,
+    "continuity": 0.25,
+    "layout": 0.2,
+    "text_complexity": 0.05
+  },
+  "thresholds": {
+    "simple": 15,
+    "medium_low": 30,
+    "medium_high": 45
+  },
+  "continuity": {
+    "text_weight": 0.5,
+    "table_weight": 0.5
+  },
+  "layout": {
+    "table_weight": 0.4,
+    "multi_column_weight": 0.35,
+    "density_weight": 0.25
+  },
+  "image": {
+    "images_per_page_cap": 2.0,
+    "chart_weight": 2.0
+  }
+}

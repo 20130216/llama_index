@@ -1,0 +1,28 @@
+{
+  "_comment": "法律文件，适用于文本复杂度高、图像稀疏文档。优化：降低images_per_page_cap，提高table_weight和chart_weight。",
+  "weights": {
+    "page": 0.2,
+    "image": 0.1,
+    "continuity": 0.3,
+    "layout": 0.25,
+    "text_complexity": 0.15
+  },
+  "thresholds": {
+    "simple": 20,
+    "medium_low": 35,
+    "medium_high": 50
+  },
+  "continuity": {
+    "text_weight": 0.7,
+    "table_weight": 0.3
+  },
+  "layout": {
+    "table_weight": 0.35,
+    "multi_column_weight": 0.4,
+    "density_weight": 0.25
+  },
+  "image": {
+    "images_per_page_cap": 2.0,
+    "chart_weight": 1.5
+  }
+}

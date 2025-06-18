@@ -1,0 +1,28 @@
+{
+  "_comment": "财务表格，适用于高表格密度、跨页表格、少量图像的文档。优化：降低images_per_page_cap，降低medium_high阈值。",
+  "weights": {
+    "page": 0.15,
+    "image": 0.15,
+    "continuity": 0.35,
+    "layout": 0.3,
+    "text_complexity": 0.05
+  },
+  "thresholds": {
+    "simple": 20,
+    "medium_low": 35,
+    "medium_high": 45
+  },
+  "continuity": {
+    "text_weight": 0.3,
+    "table_weight": 0.7
+  },
+  "layout": {
+    "table_weight": 0.5,
+    "multi_column_weight": 0.2,
+    "density_weight": 0.3
+  },
+  "image": {
+    "images_per_page_cap": 1.5,
+    "chart_weight": 1.5
+  }
+}

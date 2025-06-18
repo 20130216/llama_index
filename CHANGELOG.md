@@ -1928,7 +1928,7 @@
 ### `llama-index-embeddings-voyageai` [0.3.3]
 
 - add support for voyageai >=0.3.0 (#17120)
-- Introducting VoyageAI's new multimodal embeddings model (#17261)
+- Introducing VoyageAI's new multimodal embeddings model (#17261)
 - VoyageAI multimodal embedding, correction (#17284)
 
 ### `llama-index-experimental` [0.5.2]
@@ -8135,7 +8135,7 @@ Last patch before v0.10!
 ### Bug Fixes / Nits
 
 - Avoid `NotImplementedError` for async langchain embeddings (#7668)
-- Imrpoved reliability of LLM selectors (#7678)
+- Improved reliability of LLM selectors (#7678)
 - Fixed `query_wrapper_prompt` and `system_prompt` for output parsers and completion models (#7678)
 - Fixed node attribute inheritance in citation query engine (#7675)
 

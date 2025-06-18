@@ -119,7 +119,7 @@ class PreprocessReader(BaseReader):
 
         if self._filepath is None and self._process_id is None:
             raise ValueError(
-                "Please provide either filepath or process_id to handle the resutls."
+                "Please provide either filepath or process_id to handle the results."
             )
 
         self._chunks = None

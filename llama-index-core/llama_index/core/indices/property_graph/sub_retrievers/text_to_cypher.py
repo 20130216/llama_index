@@ -19,11 +19,11 @@ DEFAULT_SUMMARY_TEMPLATE = PromptTemplate(
         Make the answer sound as a response to the question. Do not mention that you based the result on the given information.
         Here is an example:
 
-        Question: How many miles is the flight between the ANC and SEA airports?
+        Question: How many miles is the flight between the AND and SEA airports?
         Information:
         [{"r.dist": 1440}]
         Helpful Answer:
-        It is 1440 miles to fly between the ANC and SEA airports.
+        It is 1440 miles to fly between the AND and SEA airports.
 
         Follow this example when generating answers.
         Question:

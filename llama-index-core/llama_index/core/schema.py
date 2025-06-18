@@ -692,7 +692,7 @@ class TextNode(BaseNode):
     """
     Provided for backward compatibility.
 
-    Note: we keep the field with the typo "seperator" to maintain backward compatibility for
+    Note: we keep the field with the typo "separator" to maintain backward compatibility for
     serialized objects.
     """
 

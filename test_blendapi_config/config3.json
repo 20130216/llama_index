@@ -1,0 +1,28 @@
+{
+  "_comment": "抖音策略分析报告，适用于图像密集文档。优化：提高images_per_page_cap和chart_weight，增table_weight。",
+  "weights": {
+    "page": 0.15,
+    "image": 0.3,
+    "continuity": 0.2,
+    "layout": 0.3,
+    "text_complexity": 0.05
+  },
+  "thresholds": {
+    "simple": 15,
+    "medium_low": 35,
+    "medium_high": 45
+  },
+  "continuity": {
+    "text_weight": 0.6,
+    "table_weight": 0.4
+  },
+  "layout": {
+    "table_weight": 0.3,
+    "multi_column_weight": 0.4,
+    "density_weight": 0.3
+  },
+  "image": {
+    "images_per_page_cap": 2.0,
+    "chart_weight": 2.0
+  }
+}

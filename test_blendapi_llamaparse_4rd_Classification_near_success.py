@@ -21,6 +21,7 @@ import nltk
 from nltk.tokenize import sent_tokenize, word_tokenize
 
 
+# 配置日志
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s",
@@ -32,7 +33,6 @@ logging.basicConfig(
 logging.getLogger("PyPDF2").setLevel(logging.INFO)
 logging.getLogger("pdfplumber").setLevel(logging.INFO)
 logging.getLogger("llama_parse").setLevel(logging.DEBUG)
-logging.getLogger("_client").setLevel(logging.DEBUG)  # 新增
 logger = logging.getLogger(__name__)
 
 
@@ -83,7 +83,7 @@ def validate_config(config: Dict) -> Dict:
     thresholds = config.get("thresholds", {})
     continuity = config.get("continuity", {})
     layout = config.get("layout", {})
-    image = config.get("image", {})  # 保留以验证 image 字段
+    config.get("image", {})
 
     # 验证权重和
     total_weight = sum(
@@ -118,17 +118,6 @@ def validate_config(config: Dict) -> Dict:
     ):
         raise ValueError(f"Invalid layout weights: {layout}")
 
-    # 验证 image 字段
-    if not image.get("images_per_page_cap", 0) > 0:
-        raise ValueError(
-            f"Invalid image.images_per_page_cap: {image.get('images_per_page_cap')}, "
-            "must be positive"
-        )
-    if not image.get("chart_weight", 0) > 0:
-        raise ValueError(
-            f"Invalid image.chart_weight: {image.get('chart_weight')}, must be positive"
-        )
-
     return config
 
 
@@ -143,29 +132,27 @@ def load_config(config_path: str = "config.json") -> Dict:
         config_file = config_dir / config_file
     elif not config_file.exists():
         logger.warning(
-            f"Config file {config_path} not found, using default configuration for "
-            "general-purpose documents"
+            f"Config file {config_path} not found, using default configuration"
         )
         logger.info(
-            "Please check 'test_blendapi_config' folder for specialized configs "
-            "(e.g., config1.json for financial tables, config2.json for corporate reports)"
+            "Please check 'test_blendapi_config' folder for available configs (e.g., config1.json for financial tables)"
         )
         config = {
             "weights": {
                 "page": 0.20,
                 "image": 0.20,
-                "continuity": 0.25,
+                "continuity": 0.30,
                 "layout": 0.30,
                 "text_complexity": 0.05,
             },
-            "thresholds": {"simple": 15, "medium_low": 30, "medium_high": 45},
+            "thresholds": {"simple": 20, "medium_low": 35, "medium_high": 50},
             "continuity": {"text_weight": 0.4, "table_weight": 0.6},
             "layout": {
                 "table_weight": 0.45,
                 "multi_column_weight": 0.25,
                 "density_weight": 0.30,
             },
-            "image": {"images_per_page_cap": 2.0, "chart_weight": 2.0},
+            "image": {"images_per_page_cap": 2, "chart_weight": 1.5},
         }
         return validate_config(config)
 
@@ -183,54 +170,14 @@ def load_config(config_path: str = "config.json") -> Dict:
 config = load_config()
 
 # 统一提示词
-# USER_PROMPT = (
-#     "提取文档核心内容，严格遵循以下要求："
-#     "1. 排除所有非核心内容，包括页码、页眉、页脚（如 '\\d+-\\d+-\\d+', 'Page \\d+', "
-#     "'.*说明书.*' 等），仅保留正文、表格、图表和图片描述。"
-#     "2. 将跨页表格合并为单一表格，仅保留首个表头，忽略后续重复表头（表头通常为标题行，"
-#     "如 '编号 | 名称 | ...'）。"
-#     "3. 完整提取所有表格行、嵌入式图表和图片的结构化内容（如 Mermaid 语法），"
-#     "确保段落不截断，保留小字、脚注等细节。"
-#     "4. 支持多语言内容，优先提取目标语言（如中文）的文本，输出格式为 Markdown，"
-#     "结构清晰，适合下游处理。"
-# )
-
-# SYSTEM_PROMPT_APPEND = (
-#     "专注于文档核心内容的提取与结构化，遵循以下规则："
-#     "1. 忽略页码、页眉、页脚等非核心元素（通过正则表达式匹配，"
-#     "如 '\\d+-\\d+-\\d+', 'Page \\d+', '.*说明书.*'），排除重复性标题或标识。"
-#     "2. 跨页表格合并为单一表格，仅保留首个表头，忽略重复表头及嵌套表格冗余部分，"
-#     "确保表格行数完整。"
-#     "3. 确保段落、注释、小字等内容完整提取，避免截断，保留嵌入式图表或图片的结构化表示"
-#     "（如 Mermaid 语法或 LaTeX 格式）。"
-#     "4. 支持多语言噪声处理，优先提取目标语言（如中文）内容，输出 Markdown 格式，"
-#     "结构清晰，适配知识提取或 RAG 系统。"
-# )
-
-# 统一提示词
 USER_PROMPT = (
-    "提取文档核心内容，严格遵循以下要求："
-    "1. 排除所有非核心内容，包括页码、页眉、页脚（如 '\\d+-\\d+-\\d+', 'Page \\d+', "
-    "'.*说明书.*' 等），仅保留正文、表格和图表中的文字内容。"
-    "2. 将跨页表格合并为单一表格，仅保留首个表头，忽略后续重复表头（表头通常为标题行，"
-    "如 '编号 | 名称 | ...'）。"
-    "3. 完整提取所有表格行、图表和图片中的文字内容（如 Mermaid 语法表示的结构化内容），"
-    "确保段落不截断，保留小字、脚注等细节，不生成图片的描述性文本（如图片外观或风格描述）。"
-    "4. 支持多语言内容，优先提取目标语言的文本（由外部配置指定），输出格式为 Markdown，"
-    "结构清晰，适合下游处理。"
+    "针对本文件，排除所有页码、页眉、页脚，并确保跨页表格合并为单一表格，仅保留一个表头，"
+    "完整提取所有表格行数、嵌入式图表和图片内容，避免截断段落或遗漏小字。"
 )
-
-# SYSTEM_PROMPT_APPEND = (
-#     "补充规则以确保文档核心内容的结构化提取："
-#     "1. 遵循 USER_PROMPT 的要求，特别强调忽略非核心元素、合并跨页表格、仅提取图表和图片中的文字内容，"
-#     "不生成图片描述性文本。"
-#     "2. 支持多语言噪声处理，确保输出优先使用目标语言（由外部配置指定），并适配知识提取或 RAG 系统。"
-# )
 SYSTEM_PROMPT_APPEND = (
-    "补充规则以确保核心内容的结构化提取："
-    "1. 绝对禁止生成任何与图片外观、风格或内容的描述性文本（如‘The image shows...’），仅提取图片中的文字内容（如图表标题、数据、Mermaid 语法）。"
-    "2. 严格遵循 USER_PROMPT 的要求，忽略非核心元素，合并跨页表格，仅提取图表和图片中的文字内容。"
-    "3. 支持多语言噪声处理，优先使用外部配置指定的语言（简体中文），输出 Markdown 格式，适配知识提取或 RAG 系统。"
+    "仅提取核心内容，排除页码、页眉、页脚或类似标记（如 '结束页面'、'# 1-1-156'、'Page 1'），"
+    "支持多语言噪声，合并跨页表格，仅保留首个表头，忽略重复表头和嵌套表格冗余，"
+    "确保完整提取所有表格行数、嵌入式图表和图片内容，避免截断段落或遗漏小字。"
 )
 
 
@@ -277,8 +224,7 @@ def compute_text_complexity(text: str) -> float:
     except Exception as e:
         logger.warning(f"Text complexity computation failed: {e}")
         logger.info(
-            "Try running 'import nltk; nltk.download('punkt_tab')' "
-            "to resolve NLTK resource issues"
+            "Try running 'import nltk; nltk.download('punkt_tab')' to resolve NLTK resource issues"
         )
         return 0.5  # 回退默认值
 
@@ -286,7 +232,7 @@ def compute_text_complexity(text: str) -> float:
 def analyze_pdf_complexity(
     file_path: Path, cache_dir: Path
 ) -> Tuple[float, bool, bool, Dict]:
-    """分析 PDF 复杂性，返回复杂度得分、是否连续、是否视觉密集及分析细节。."""
+    """分析PDF复杂性，返回复杂度得分、是否连续、是否视觉密集及分析细节。."""
     try:
         with pdfplumber.open(file_path) as pdf:
             num_pages = len(pdf.pages)
@@ -314,6 +260,7 @@ def analyze_pdf_complexity(
                 image_count += len(images)
                 page_info["images"] = len(images)
 
+                # 检测复杂图表
                 for img in images:
                     img_bbox = (img["x0"], img["top"], img["x1"], img["bottom"])
                     img_text = page.within_bbox(img_bbox).extract_text() or ""
@@ -432,6 +379,7 @@ def analyze_pdf_complexity(
                 or layout_score > 0.5 * config["weights"]["layout"] * 100
             )
 
+            # 强制最低分值
             if is_visually_dense and total_score < config["thresholds"]["simple"]:
                 total_score = config["thresholds"]["simple"]
             if is_continuous and total_score < config["thresholds"]["medium_low"]:
@@ -460,37 +408,29 @@ def analyze_pdf_complexity(
             }
 
             logger.info(
-                f"Complexity analysis for {file_path.name}: score={total_score:.2f}, "
-                f"continuous={is_continuous}, visually_dense={is_visually_dense}"
+                f"Complexity analysis for {file_path.name}: score={total_score:.2f}, continuous={is_continuous}, visually_dense={is_visually_dense}"
             )
             logger.debug(
-                f"Score breakdown: page={page_score:.2f}, image={image_score:.2f}, "
-                f"continuity={continuity_score:.2f}, layout={layout_score:.2f}, "
-                f"text_complexity={text_complexity_score:.2f}"
+                f"Score breakdown: page={page_score:.2f}, image={image_score:.2f}, continuity={continuity_score:.2f}, layout={layout_score:.2f}, text_complexity={text_complexity_score:.2f}"
             )
 
             return total_score, is_continuous, is_visually_dense, details
 
     except Exception as e:
-        logger.error(
-            f"Complexity analysis failed for {file_path}: {e}. Please check if the PDF "
-            "is valid (e.g., not corrupted or generated incorrectly) or try a simpler "
-            "parsing mode like 'parse_page_with_llm'."
-        )
+        logger.error(f"Complexity analysis failed for {file_path}: {e}")
         file_size_mb = get_file_size_mb(file_path)
         try:
             with PdfReader(str(file_path)) as reader:
                 num_pages = len(reader.pages)
         except Exception:
             num_pages = 1
-        estimated_score = min(20 + file_size_mb * 3 + num_pages * 1, 40)  # 更保守的估计
+        estimated_score = min(30 + file_size_mb * 5 + num_pages * 2, 60)
         details = {
             "error": str(e),
             "page_details": [],
             "estimated_score": estimated_score,
             "num_pages": num_pages,
             "file_size_mb": file_size_mb,
-            "failed_page": getattr(e, "page_number", "unknown"),
         }
         logger.info(
             f"Estimated complexity score for {file_path}: {estimated_score:.2f}"
@@ -526,10 +466,7 @@ def get_parser_config(
     if score > config["thresholds"]["medium_high"]:
         if is_continuous:
             parser_mode = "parse_document_with_llm"
-            reason = (
-                f"Score {score:.2f} > {config['thresholds']['medium_high']}, "
-                "continuous=True"
-            )
+            reason = f"Score {score:.2f} > {config['thresholds']['medium_high']}, continuous=True"
         else:
             parser_mode = (
                 "parse_page_with_layout_agent"
@@ -538,10 +475,7 @@ def get_parser_config(
             )
             disable_image_extraction = not is_visually_dense
             save_images = is_visually_dense
-            reason = (
-                f"Score {score:.2f} > {config['thresholds']['medium_high']}, "
-                f"continuous=False, visually_dense={is_visually_dense}"
-            )
+            reason = f"Score {score:.2f} > {config['thresholds']['medium_high']}, continuous=False, visually_dense={is_visually_dense}"
     elif score > config["thresholds"]["medium_low"]:
         parser_mode = (
             "parse_page_with_layout_agent"
@@ -550,10 +484,7 @@ def get_parser_config(
         )
         disable_image_extraction = not is_visually_dense
         save_images = is_visually_dense
-        reason = (
-            f"Score {score:.2f} in ({config['thresholds']['medium_low']}, "
-            f"{config['thresholds']['medium_high']}], visually_dense={is_visually_dense}"
-        )
+        reason = f"Score {score:.2f} in ({config['thresholds']['medium_low']}, {config['thresholds']['medium_high']}], visually_dense={is_visually_dense}"
     elif score > config["thresholds"]["simple"]:
         parser_mode = (
             "parse_page_with_layout_agent"
@@ -562,17 +493,13 @@ def get_parser_config(
         )
         disable_image_extraction = not is_visually_dense
         save_images = is_visually_dense
-        reason = (
-            f"Score {score:.2f} in ({config['thresholds']['simple']}, "
-            f"{config['thresholds']['medium_low']}], visually_dense={is_visually_dense}"
-        )
+        reason = f"Score {score:.2f} in ({config['thresholds']['simple']}, {config['thresholds']['medium_low']}], visually_dense={is_visually_dense}"
     else:
         parser_mode = "parse_page_with_llm"
         reason = f"Score {score:.2f} <= {config['thresholds']['simple']}"
 
     logger.debug(
-        f"Selected parser mode: {parser_mode}, disable_image_extraction="
-        f"{disable_image_extraction}, save_images={save_images}, reason: {reason}"
+        f"Selected parser mode: {parser_mode}, disable_image_extraction={disable_image_extraction}, save_images={save_images}, reason: {reason}"
     )
     return LlamaParse(
         api_key=api_key,
@@ -582,7 +509,8 @@ def get_parser_config(
         preserve_layout_alignment_across_pages=True,
         spreadsheet_extract_sub_tables=True,
         result_type="markdown",
-        disable_image_extraction=True,
+        disable_image_extraction=disable_image_extraction,
+        save_images=save_images,
         user_prompt=USER_PROMPT,
         system_prompt_append=SYSTEM_PROMPT_APPEND,
         num_workers=4,
@@ -619,6 +547,7 @@ def sync_parse_with_new_loop(parser: LlamaParse, file_path: str) -> List:
 async def parse_files(
     file_paths: List[Path], output_dir: Path, input_root: Path, use_sync: bool = False
 ) -> Tuple[List, Dict, Dict]:
+    """解析文件列表，逐个处理，保留目录结构，动态调整阈值。."""
     all_docs = []
     file_docs_map = {}
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -630,30 +559,16 @@ async def parse_files(
         "thresholds": config["thresholds"].copy(),
     }
 
-    # 强制 _client 日志为 DEBUG，禁用传播
-    client_logger = logging.getLogger("_client")
-    client_logger.setLevel(logging.DEBUG)
-    client_logger.propagate = False
-
+    # 预创建输出目录结构
     for file_path in file_paths:
         relative_path = file_path.relative_to(input_root)
         (output_dir / relative_path.parent).mkdir(parents=True, exist_ok=True)
 
-    # 缓存复杂度分析结果
-    complexity_cache = {}
+    # 自适应阈值
     scores = []
     for file_path in file_paths:
-        score, is_continuous, is_visually_dense, details = analyze_pdf_complexity(
-            file_path, cache_dir
-        )
-        complexity_cache[str(file_path)] = (
-            score,
-            is_continuous,
-            is_visually_dense,
-            details,
-        )
+        score, _, _, _ = analyze_pdf_complexity(file_path, cache_dir)
         scores.append(score)
-
     if scores:
         median_score = sorted(scores)[len(scores) // 2]
         if median_score < 50:
@@ -664,21 +579,47 @@ async def parse_files(
                 "medium_high": config["thresholds"]["medium_high"] * scale,
             }
             logger.info(
-                f"Adjusted thresholds based on median score {median_score:.2f}: "
-                f"{report['thresholds']}"
+                f"Adjusted thresholds based on median score {median_score:.2f}: {report['thresholds']}"
             )
 
     for file_path in file_paths:
         try:
             start_time = time.time()
-            logger.info(f"Parsing file: {file_path}")
+            logger.debug(f"Parsing file: {file_path}")
+            logger.debug(f"File size: {get_file_size_mb(file_path):.2f} MB")
+
             complexity_score, is_continuous, is_visually_dense, analysis_details = (
-                complexity_cache[str(file_path)]
+                analyze_pdf_complexity(file_path, cache_dir)
             )
             parser, parse_reason = get_parser_config(
                 complexity_score, is_continuous, is_visually_dense
             )
             analysis_details["parse_reason"] = parse_reason
+
+            try:
+                reader = PdfReader(str(file_path))
+                num_pages = len(reader.pages)
+                logger.debug(f"File pages: {num_pages}")
+                image_count = 0
+                for page in reader.pages:
+                    resources = page.get("/Resources", {})
+                    if isinstance(resources, dict):
+                        if "/XObject" in resources:
+                            image_count += 1
+                    elif hasattr(resources, "get_object"):
+                        resolved_resources = resources.get_object()
+                        if (
+                            isinstance(resolved_resources, dict)
+                            and "/XObject" in resolved_resources
+                        ):
+                            image_count += 1
+                logger.debug(f"Image count: {image_count}")
+            except Exception as e:
+                logger.warning(f"Invalid PDF file {file_path}: {e}")
+                report["failures"].append(
+                    {"file": str(file_path), "error": f"PDF validation failed: {e!s}"}
+                )
+                continue
 
             docs = []
             parse_success = False
@@ -687,33 +628,30 @@ async def parse_files(
                 if parser.parse_mode != "parse_page_with_llm"
                 else None
             )
-            last_progress_log = start_time
-            job_id = None
 
             for attempt in range(3):
                 try:
-                    logger.info(
-                        f"Started parsing {file_path} with mode {parser.parse_mode} "
-                        f"(attempt {attempt + 1}/3)"
+                    logger.debug(
+                        f"Attempt {attempt + 1}/3: Starting async parse with mode {parser.parse_mode}"
                     )
                     docs = await parser.aload_data(str(file_path))
-                    job_id = getattr(docs, "job_id", "unknown")
-                    logger.info(
-                        f"Parsed {file_path}: {len(docs)} pages, first doc preview: "
-                        f"{docs[0].text[:50] if docs and hasattr(docs[0], 'text') else 'N/A'}"
+                    logger.debug(
+                        f"Async parse completed in {time.time() - start_time:.2f} seconds"
                     )
                     parse_success = True
+                    logger.debug(
+                        f"Parsed docs: {len(docs)} pages, first doc text preview: {docs[0].text[:50] if docs and hasattr(docs[0], 'text') else 'N/A'}"
+                    )
                     break
                 except (RuntimeError, asyncio.CancelledError) as e:
                     if attempt < 2:
                         logger.debug(
-                            f"Retrying {file_path} (attempt {attempt + 2}/3): "
-                            f"{type(e).__name__}: {e}"
+                            f"Retrying {file_path} (attempt {attempt + 2}/3): {type(e).__name__}: {e}"
                         )
                         await asyncio.sleep(2)
                     else:
                         logger.warning(
-                            f"[AsyncError] Failed after 3 attempts for {file_path}: {e}"
+                            f"Async failed after 3 attempts for {file_path}: {e}"
                         )
                         report["failures"].append(
                             {
@@ -721,41 +659,13 @@ async def parse_files(
                                 "error": f"Async parse failed: {e!s}",
                             }
                         )
-                except httpx.HTTPStatusError as e:
-                    current_time = time.time()
-                    elapsed = current_time - start_time
-                    if current_time - last_progress_log >= 60:
-                        status = getattr(e, "response_json", {}).get(
-                            "status", "PENDING"
-                        )
-                        action = "Task in progress, please wait"
-                        if elapsed > parser.max_timeout * 0.8:
-                            action = (
-                                f"Task nearing timeout ({parser.max_timeout}s), "
-                                "consider increasing max_timeout"
-                            )
-                        logger.info(
-                            f"Polling job {job_id or 'unknown'} for {file_path}, "
-                            f"elapsed time: {elapsed:.2f}s, status: {status}, "
-                            f"action: {action}"
-                        )
-                        last_progress_log = current_time
-                    if elapsed > parser.max_timeout:
+                except Exception as e:
+                    if (
+                        isinstance(e, httpx.HTTPStatusError)
+                        and e.response.status_code == 429
+                    ):
                         logger.error(
-                            f"[TimeoutError] Parsing {file_path} exceeded max_timeout "
-                            f"({parser.max_timeout}s)"
-                        )
-                        report["failures"].append(
-                            {
-                                "file": str(file_path),
-                                "error": f"Timeout: exceeded {parser.max_timeout}s",
-                            }
-                        )
-                        break
-                    if e.response.status_code == 429:
-                        logger.error(
-                            f"[RateLimitError] API rate limit exceeded for {file_path}: "
-                            f"{e}. Please check your LlamaCloud account credit limit."
+                            f"API rate limit exceeded for {file_path}: {e}. Please check your LlamaCloud account credit limit or upgrade your plan."
                         )
                         report["failures"].append(
                             {
@@ -763,60 +673,17 @@ async def parse_files(
                                 "error": "API rate limit exceeded: check credit limit",
                             }
                         )
-                        break
-                    if e.response.status_code >= 500:
-                        logger.error(
-                            f"[ServerError] HTTP error {e.response.status_code} for "
-                            f"{file_path}: {e}. Please try again later or contact "
-                            "LlamaCloud support."
+                    else:
+                        logger.warning(
+                            f"Unexpected error during async parsing {file_path}: {e}"
                         )
                         report["failures"].append(
                             {
                                 "file": str(file_path),
-                                "error": f"Server error (HTTP {e.response.status_code}): "
-                                f"{e!s}",
+                                "error": f"Unexpected error: {e!s}",
                             }
                         )
-                        break
-                    logger.error(
-                        f"[HTTPError] HTTP error {e.response.status_code} for "
-                        f"{file_path}: {e}."
-                    )
-                    report["failures"].append(
-                        {
-                            "file": str(file_path),
-                            "error": f"HTTP error (HTTP {e.response.status_code}): "
-                            f"{e!s}",
-                        }
-                    )
-                    break
-                except requests.exceptions.ConnectionError as e:
-                    logger.error(
-                        f"[NetworkError] Failed to connect to {base_url} for "
-                        f"{file_path}: {e}. Please check your network or VPN."
-                    )
-                    report["failures"].append(
-                        {"file": str(file_path), "error": f"Network error: {e!s}"}
-                    )
-                    break
-                except requests.exceptions.Timeout as e:
-                    logger.error(
-                        f"[TimeoutError] Request timed out for {file_path}: {e}. "
-                        "Please try again or increase max_timeout."
-                    )
-                    report["failures"].append(
-                        {"file": str(file_path), "error": f"Timeout error: {e!s}"}
-                    )
-                    break
-                except Exception as e:
-                    logger.warning(
-                        f"[UnexpectedError] Unexpected error during parsing "
-                        f"{file_path}: {e}"
-                    )
-                    report["failures"].append(
-                        {"file": str(file_path), "error": f"Unexpected error: {e!s}"}
-                    )
-                    if attempt == 0 and fallback_mode:
+                    if fallback_mode and attempt == 0:
                         logger.debug(f"Falling back to {fallback_mode} for {file_path}")
                         parser = LlamaParse(
                             api_key=api_key,
@@ -851,17 +718,16 @@ async def parse_files(
                     for i, doc in enumerate(docs):
                         text = doc.text.strip() if hasattr(doc, "text") else ""
                         f.write(f"## Page {i + 1}\n\n{text}\n\n")
-                logger.info(f"Saved to {output_file}")
+                logger.debug(f"Saved to {output_file}")
+                with open(output_file, "rb") as f:
+                    file_hash = hashlib.md5(f.read()).hexdigest()
+                logger.debug(f"Output file hash: {file_hash}")
             else:
                 logger.warning(f"No valid content for {file_path}, skipping output")
                 report["failures"].append(
                     {"file": str(file_path), "error": "No valid content"}
                 )
 
-            error_reason = next(
-                (f["error"] for f in report["failures"] if f["file"] == str(file_path)),
-                "",
-            )
             report["files"].append(
                 {
                     "file": str(file_path),
@@ -871,65 +737,43 @@ async def parse_files(
                     "time": time.time() - start_time,
                     "success": parse_success,
                     "doc_count": len(docs),
-                    "error": error_reason,
                 }
             )
 
+            logger.info(f"File parsing completed: {file_path}")
+
+        except RuntimeError as e:
+            logger.warning(f"Event loop error for {file_path}: {e}")
+            report["failures"].append(
+                {"file": str(file_path), "error": f"Event loop error: {e!s}"}
+            )
+            continue
+        except requests.exceptions.ConnectionError as e:
+            logger.error(
+                f"Network error: Failed to connect to {base_url}. Please check VPN: {e}"
+            )
+            report["failures"].append(
+                {"file": str(file_path), "error": f"Network error: {e!s}"}
+            )
+            raise
+        except requests.exceptions.Timeout as e:
+            logger.error(f"Timeout error for {file_path}: Request timed out: {e}")
+            report["failures"].append(
+                {"file": str(file_path), "error": f"Timeout error: {e!s}"}
+            )
+            raise
         except Exception as e:
-            logger.error(f"[UnexpectedError] Error processing {file_path}: {e}")
+            logger.warning(f"Error processing {file_path}: {e}")
             report["failures"].append(
                 {"file": str(file_path), "error": f"Unexpected error: {e!s}"}
             )
-
-    table_data = []
-    for file_report in report["files"]:
-        file_path = file_report["file"]
-        docs = file_docs_map.get(file_path, [])
-        char_count = (
-            sum(
-                len(doc.text.strip())
-                for doc in docs
-                if hasattr(doc, "text") and doc.text
-            )
-            if file_report["success"]
-            else 0
-        )
-        status = "成功" if file_report["success"] else "失败"
-        error_reason = file_report["error"] if not file_report["success"] else ""
-        table_data.append(
-            [
-                Path(file_path).name,
-                file_report["doc_count"],
-                char_count,
-                f"{file_report['time']:.2f}",
-                str(file_report["complexity_details"].get("is_continuous", False)),
-                str(file_report["complexity_details"].get("is_visually_dense", False)),
-                file_report["parse_mode"],
-                file_report["complexity_details"].get("parse_reason", ""),
-                status,
-                error_reason,
-            ]
-        )
-    headers = [
-        "文件名",
-        "页面数",
-        "字符数",
-        "解析时长(s)",
-        "连续性",
-        "视觉密集",
-        "解析模式",
-        "模式选择理由",
-        "状态",
-        "错误原因",
-    ]
-    logger.info("解析汇总：")
-    logger.info(tabulate(table_data, headers=headers, tablefmt="fancy_grid"))
+            continue
 
     return all_docs, report, file_docs_map
 
 
 async def main():
-    """主函数，解析 PDF 文件或文件夹。."""
+    """主函数，解析PDF文件或文件夹。."""
     start_time = datetime.datetime.now()
     logger.info(f"Starting parsing at {start_time}")
 
@@ -1010,14 +854,12 @@ async def main():
                     except Exception as e:
                         if attempt < 2:
                             logger.debug(
-                                f"Retrying {input_path} (attempt {attempt + 2}/3): "
-                                f"{type(e).__name__}: {e}"
+                                f"Retrying {input_path} (attempt {attempt + 2}/3): {type(e).__name__}: {e}"
                             )
                             time.sleep(2)
                         else:
                             logger.warning(
-                                f"[SyncError] Sync failed after 3 attempts for "
-                                f"{input_path}: {e}"
+                                f"Sync failed after 3 attempts for {input_path}: {e}"
                             )
                             report["failures"].append(
                                 {
@@ -1031,27 +873,26 @@ async def main():
                 for attempt in range(3):
                     try:
                         logger.debug(
-                            f"Attempt {attempt + 1}/3: Starting async parse with "
-                            f"mode {parser.parse_mode}"
+                            f"Attempt {attempt + 1}/3: Starting async parse with mode {parser.parse_mode}"
                         )
                         docs = await parser.aload_data(str(input_path))
-                        logger.info(
-                            f"Parsed {input_path}: {len(docs)} pages, first doc "
-                            f"preview: {docs[0].text[:50] if docs and hasattr(docs[0], 'text') else 'N/A'}"
+                        logger.debug(
+                            f"Async parse completed in {time.time() - start_time:.2f} seconds"
                         )
                         parse_success = True
+                        logger.debug(
+                            f"Parsed docs: {len(docs)} pages, first doc text preview: {docs[0].text[:50] if docs and hasattr(docs[0], 'text') else 'N/A'}"
+                        )
                         break
                     except (RuntimeError, asyncio.CancelledError) as e:
                         if attempt < 2:
                             logger.debug(
-                                f"Retrying {input_path} (attempt {attempt + 2}/3): "
-                                f"{type(e).__name__}: {e}"
+                                f"Retrying {input_path} (attempt {attempt + 2}/3): {type(e).__name__}: {e}"
                             )
                             await asyncio.sleep(2)
                         else:
                             logger.warning(
-                                f"[AsyncError] Async failed after 3 attempts for "
-                                f"{input_path}: {e}"
+                                f"Async failed after 3 attempts for {input_path}: {e}"
                             )
                             report["failures"].append(
                                 {
@@ -1059,56 +900,9 @@ async def main():
                                     "error": f"Async parse failed: {e!s}",
                                 }
                             )
-                    except httpx.HTTPStatusError as e:
-                        if e.response.status_code == 429:
-                            logger.error(
-                                f"[RateLimitError] API rate limit exceeded for "
-                                f"{input_path}: {e}. Please check your LlamaCloud "
-                                "account credit limit."
-                            )
-                            report["failures"].append(
-                                {
-                                    "file": str(input_path),
-                                    "error": "API rate limit exceeded: check credit "
-                                    "limit",
-                                }
-                            )
-                            break
-                        logger.error(
-                            f"[ServerError] HTTP error {e.response.status_code} for "
-                            f"{input_path}: {e}. Please try again later or contact "
-                            "LlamaCloud support."
-                        )
-                        report["failures"].append(
-                            {
-                                "file": str(input_path),
-                                "error": f"Server error (HTTP "
-                                f"{e.response.status_code}): {e!s}",
-                            }
-                        )
-                        break
-                    except requests.exceptions.ConnectionError as e:
-                        logger.error(
-                            f"[NetworkError] Failed to connect to {base_url} for "
-                            f"{input_path}: {e}. Please check your network or VPN."
-                        )
-                        report["failures"].append(
-                            {"file": str(input_path), "error": f"Network error: {e!s}"}
-                        )
-                        break
-                    except requests.exceptions.Timeout as e:
-                        logger.error(
-                            f"[TimeoutError] Request timed out for {input_path}: {e}. "
-                            "Please try again or increase max_timeout."
-                        )
-                        report["failures"].append(
-                            {"file": str(input_path), "error": f"Timeout error: {e!s}"}
-                        )
-                        break
                     except Exception as e:
                         logger.warning(
-                            f"[UnexpectedError] Unexpected error during async parsing "
-                            f"{input_path}: {e}"
+                            f"Unexpected error during async parsing {input_path}: {e}"
                         )
                         report["failures"].append(
                             {
@@ -1169,8 +963,7 @@ async def main():
                     else f" ({len(text_preview)} chars)"
                 )
                 logger.debug(
-                    f"Document {i + 1}: ID={doc.id_}, Text Preview={text_preview}"
-                    f"{status}"
+                    f"Document {i + 1}: ID={doc.id_}, Text Preview={text_preview}{status}"
                 )
 
             text_lengths = [
@@ -1180,20 +973,11 @@ async def main():
             ]
             if text_lengths:
                 logger.info(
-                    f"Text stats: min={min(text_lengths)}, max={max(text_lengths)}, "
-                    f"avg={sum(text_lengths) / len(text_lengths):.2f}"
+                    f"Text stats: min={min(text_lengths)}, max={max(text_lengths)}, avg={sum(text_lengths) / len(text_lengths):.2f}"
                 )
             else:
                 logger.info("No text extracted, stats unavailable")
 
-            error_reason = next(
-                (
-                    f["error"]
-                    for f in report["failures"]
-                    if f["file"] == str(input_path)
-                ),
-                "",
-            )
             report["files"].append(
                 {
                     "file": str(input_path),
@@ -1203,31 +987,31 @@ async def main():
                     "time": time.time() - start_time,
                     "success": parse_success,
                     "doc_count": len(docs),
-                    "error": error_reason,
                 }
             )
             file_docs_map[str(input_path)] = docs
 
+        except RuntimeError as e:
+            logger.error(f"Event loop error for {input_path}: {e}")
+            report["failures"].append(
+                {"file": str(input_path), "error": f"Event loop error: {e!s}"}
+            )
         except requests.exceptions.ConnectionError as e:
             logger.error(
-                f"[NetworkError] Failed to connect to {base_url}: {e}. Please check "
-                "your network or VPN."
+                f"Network error: Failed to connect to {base_url}. Please check VPN: {e}"
             )
             report["failures"].append(
                 {"file": str(input_path), "error": f"Network error: {e!s}"}
             )
             raise
         except requests.exceptions.Timeout as e:
-            logger.error(
-                f"[TimeoutError] Request timed out for {input_path}: {e}. Please try "
-                "again or increase max_timeout."
-            )
+            logger.error(f"Timeout error for {input_path}: Request timed out: {e}")
             report["failures"].append(
                 {"file": str(input_path), "error": f"Timeout error: {e!s}"}
             )
             raise
         except Exception as e:
-            logger.error(f"[UnexpectedError] Error processing {input_path}: {e}")
+            logger.error(f"Error processing {input_path}: {e}")
             report["failures"].append(
                 {"file": str(input_path), "error": f"Unexpected error: {e!s}"}
             )
@@ -1257,11 +1041,52 @@ async def main():
         ]
         if text_lengths:
             logger.info(
-                f"Stats: min={min(text_lengths)}, max={max(text_lengths)}, "
-                f"text avg={sum(text_lengths) / len(text_lengths):.2f}"
+                f"Stats: min={min(text_lengths)}, max={max(text_lengths)}, text avg={sum(text_lengths) / len(text_lengths):.2f}"
             )
         else:
             logger.info("No text extracted, stats unavailable")
+
+        table_data = []
+        for file_report in report["files"]:
+            file_path = file_report["file"]
+            docs = file_docs_map.get(file_path, [])
+            char_count = (
+                sum(
+                    len(doc.text.strip())
+                    for doc in docs
+                    if hasattr(doc, "text") and doc.text
+                )
+                if file_report["success"]
+                else 0
+            )
+            table_data.append(
+                [
+                    Path(file_path).name,
+                    file_report["doc_count"],
+                    char_count,
+                    f"{file_report['time']:.2f}",
+                    str(file_report["complexity_details"].get("is_continuous", False)),
+                    str(
+                        file_report["complexity_details"].get(
+                            "is_visually_dense", False
+                        )
+                    ),
+                    file_report["parse_mode"],
+                    file_report["complexity_details"].get("parse_reason", ""),
+                ]
+            )
+        headers = [
+            "文件名",
+            "页面数",
+            "字符数",
+            "解析时长(s)",
+            "连续性",
+            "视觉密集",
+            "解析模式",
+            "模式选择理由",
+        ]
+        logger.info("解析汇总：")
+        logger.info(tabulate(table_data, headers=headers, tablefmt="fancy_grid"))
 
     end_time = datetime.datetime.now()
     total_time = end_time - start_time

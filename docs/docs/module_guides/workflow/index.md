@@ -6,7 +6,7 @@ A `Workflow` in LlamaIndex is an event-driven abstraction used to chain together
 
 You can create a `Workflow` to do anything! Build an agent, a RAG flow, an extraction flow, or anything else you want.
 
-Workflows are also automatically instrumented, so you get observability into each step using tools like [Arize Pheonix](../observability/index.md#arize-phoenix-local). (**NOTE:** Observability works for integrations that take advantage of the newer instrumentation system. Usage may vary.)
+Workflows are also automatically instrumented, so you get observability into each step using tools like [Arize Phoenix](../observability/index.md#arize-phoenix-local). (**NOTE:** Observability works for integrations that take advantage of the newer instrumentation system. Usage may vary.)
 
 !!! tip
     Workflows make async a first-class citizen, and this page assumes you are running in an async environment. What this means for you is setting up your code for async properly. If you are already running in a server like FastAPI, or in a notebook, you can freely use await already!

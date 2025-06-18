@@ -104,7 +104,7 @@ repos:
           [
             "--skip=*/algolia.js",
             "--ignore-words-list",
-            "astroid,gallary,momento,narl,ot,rouge,nin,gere,asend,seperator",
+            "astroid,gallary,momento,narl,ot,rouge,nin,gere,asend,separator",
           ]
 
   - repo: https://github.com/srstevenson/nb-clean
